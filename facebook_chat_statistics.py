@@ -6,7 +6,7 @@ from matplotlib.dates import DateFormatter
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_pdf import PdfPages
 import warnings
-from facebook_messenger_conversation import FacebookMessengerConversation
+from facebook_multimessenger_conversation import FacebookMessengerConversation
 
 warnings.filterwarnings('ignore', module='matplotlib')
 
@@ -20,7 +20,7 @@ def main():
     if len(sys.argv) == 2:
          path_to_conversation = str(sys.argv[1])
     else:
-        print('Usage: python3 {} /Path/To/Conversation.json'
+        print('Usage: python3 {} /Path/To/Conversation/'
         .format(sys.argv[0]))
         sys.exit()
 
@@ -49,23 +49,57 @@ def main():
     print('Average messages per day: {}'.format(fb.get_avg_msg_day()))
 
     print(banner('Plots'))
+
     names = ''
     for p in participants:
         name = p.split(' ')
         names += '{}_{}_'.format(name[0], name[1])
     names = names[:-1]
-    filename = '{}_{}_{}.pdf'.format(names, start[0:10].replace('-', ''),
+    output_filename = path_to_conversation.split('/')
+    filename = '{}_{}_{}.pdf'.format(str(output_filename[-2]), start[0:10].replace('-', ''),
                                      end[0:10].replace('-',''))
 
     # Generate PDF
     with PdfPages(filename) as pdf:
+        # General info
+        fig = plt.figure(dpi=160)
+        ax = fig.add_subplot(1,1,1)
+        table_data=[
+            ["Start", start],
+            ["End", end],
+            ["Number of days", fb.get_nbr_days()],
+            ["Number of messages", fb.get_nbr_msg()],
+            ["Number of words", fb.get_nbr_words()],
+            ["Average length of messages", str(fb.get_avg_len_msg()) + " words"],
+            ["Average message per day", fb.get_avg_msg_day()]
+        ]
+        table = ax.table(cellText=table_data, loc='center')
+        table.set_fontsize(14)
+        table.scale(1,4)
+        # Removing ticks and spines enables you to get the figure only with table
+        plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        plt.tick_params(axis='y', which='both', right=False, left=False, labelleft=False)
+        for pos in ['right','top','bottom','left']:
+            plt.gca().spines[pos].set_visible(False)
+        pdf.savefig(pad_inches=0.05)
+        plt.close()
+
         # Plot percentage
         fracs = [activity[act_p][0] for act_p in activity]
-        plt.pie(fracs, startangle=90, autopct='%1.1f%%')
-        plt.legend(participants,
-                   loc='upper left',
-                   bbox_to_anchor=(-0.15, 1.15))
-        plt.axis('equal')
+        theme = plt.get_cmap('hsv')
+
+        fig1, ax1 = plt.subplots()
+         
+        ax1.set_prop_cycle("color", [theme(1. * i / len(fracs))
+                                     for i in range(len(fracs))])
+
+        _, _ = ax1.pie(fracs, startangle=90)
+        plt.legend(loc='upper left',
+                   bbox_to_anchor=(-0.15, 1.15),
+                   labels=['%s, %i, %1.1f%%' % (l, s, s * 100 / fb.get_nbr_msg())
+                       for l, s in zip(participants, fracs)],
+                   prop={'size': 8})
+        ax1.axis('equal')
         plt.title('Who texts the most?')
         pdf.savefig()
         plt.close()

@@ -1,4 +1,5 @@
 import sys
+import os
 import numpy as np
 import json
 import matplotlib.pyplot as plt
@@ -27,23 +28,30 @@ class FacebookMessengerConversation():
                 212802592074644?helpref=uf_permalink)
 
         """
-        self.data = json.load(open(conversation))
+        self.table = []
+        self.p = []
+
+        for file_name in [file for file in os.listdir(conversation) if file.endswith('.json')]:
+            print(file_name)
+            with open(conversation + file_name) as json_file:
+                self.table.append(json.load(json_file))
 
         # Convert unicode characters
-        for p in self.data['participants']:
-            p['name'] = p['name'].encode('raw_unicode_escape').decode('utf-8')
-        for message in self.data['messages']:
-            message['sender_name'] = message['sender_name'].encode(
-                'raw_unicode_escape').decode('utf-8')
-            if 'content' in message:
-                message['content'] = message['content'].encode(
+        for data in self.table:
+            for p in data['participants']:
+                p['name'] = p['name'].encode('raw_unicode_escape').decode('utf-8')
+            for message in data['messages']:
+                message['sender_name'] = message['sender_name'].encode(
                     'raw_unicode_escape').decode('utf-8')
+                if 'content' in message:
+                    message['content'] = message['content'].encode(
+                        'raw_unicode_escape').decode('utf-8')
 
         # Set names of conversation participants
-        nbr_participants = len(self.data['participants'])
-        self.p = nbr_participants * [None]
-        for i in range(nbr_participants):
-            self.p[i] = self.data['participants'][i]['name']
+        for data in self.table:
+            for i, participant in enumerate(data['participants']):
+                if participant['name'] not in self.p:
+                    self.p.append(data['participants'][i]['name'])
 
     def get_participants(self):
         """Returns the names of the conversation participants.
@@ -68,10 +76,13 @@ class FacebookMessengerConversation():
             ValueError: If a not supported `type` was entered.
 
         """
-        start = datetime.fromtimestamp(
-            self.data['messages'][-1]['timestamp_ms']/1000)
-        end = datetime.fromtimestamp(
-            self.data['messages'][0]['timestamp_ms']/1000)
+        start = end = datetime.fromtimestamp(self.table[0]['messages'][-1]['timestamp_ms']/1000)
+
+        for data in self.table:
+            if start > datetime.fromtimestamp(data['messages'][-1]['timestamp_ms']/1000):
+                start = datetime.fromtimestamp(data['messages'][-1]['timestamp_ms']/1000)
+            if end < datetime.fromtimestamp(data['messages'][0]['timestamp_ms']/1000):
+                end = datetime.fromtimestamp(data['messages'][0]['timestamp_ms']/1000)
         if type == 'datetime':
             return start, end
         elif type == 'str':
@@ -98,7 +109,12 @@ class FacebookMessengerConversation():
             int: Number of messages.
 
         """
-        return len(self.data['messages'])
+        nbr_msg = 0
+
+        for data in self.table:
+            nbr_msg += len(data['messages'])
+
+        return nbr_msg
 
     def get_nbr_words(self):
         """Returns the total number of words.
@@ -108,9 +124,11 @@ class FacebookMessengerConversation():
 
         """
         nbr_words = 0
-        for message in self.data['messages']:
-            if 'content' in message:
-                nbr_words += len(message['content'].split())
+
+        for data in self.table:
+            for message in data['messages']:
+                if 'content' in message:
+                    nbr_words += len(message['content'].split())
         return nbr_words
 
     def get_avg_len_msg(self):
@@ -142,11 +160,12 @@ class FacebookMessengerConversation():
         """
         nbr_msg = self.get_nbr_msg()
         act = {p: 0 for p in self.p}
-        for message in self.data['messages']:
-            try:
-                act[message['sender_name']] += 1
-            except KeyError:
-                pass
+        for data in self.table:
+            for message in data['messages']:
+                try:
+                    act[message['sender_name']] += 1
+                except KeyError:
+                    pass
         for key in act:
             nbr_msg_p = act[key]
             act[key] = [nbr_msg_p, 100*round(nbr_msg_p/nbr_msg, 2)]
@@ -172,25 +191,26 @@ class FacebookMessengerConversation():
         index = len(timeline) - 1
         timeline[index] = current_day
         nbr_times_day[index] = 1
-        for message in self.data['messages']:
-            current = datetime.fromtimestamp(
-                message['timestamp_ms']/1000)
-            h = int(round(current.hour + current.minute/60. +\
-                current.second/3600))
-            if h == 24:
-                h = 0
-            nbr_times_hour[h] = nbr_times_hour[h] + 1
-            wd = current.weekday()
-            nbr_times_weekday[wd] = nbr_times_weekday[wd] + 1
-            current = current.date()
-            if current == current_day:
-                nbr_times_day[index] = nbr_times_day[index] + 1
-            elif current < current_day:
-                diff = (current_day - current).days
-                index = index - diff
-                current_day = current
-                timeline[index] = current_day
-                nbr_times_day[index] = 1
+        for data in self.table:
+            for message in data['messages']:
+                current = datetime.fromtimestamp(
+                    message['timestamp_ms']/1000)
+                h = int(round(current.hour + current.minute/60. +\
+                    current.second/3600))
+                if h == 24:
+                    h = 0
+                nbr_times_hour[h] = nbr_times_hour[h] + 1
+                wd = current.weekday()
+                nbr_times_weekday[wd] = nbr_times_weekday[wd] + 1
+                current = current.date()
+                if current == current_day:
+                    nbr_times_day[index] = nbr_times_day[index] + 1
+                elif current < current_day:
+                    diff = (current_day - current).days
+                    index = index - diff
+                    current_day = current
+                    timeline[index] = current_day
+                    nbr_times_day[index] = 1
         dates = [None] * len(timeline)
         for i in range(0, len(timeline)):
             if timeline[i] == None:
@@ -213,15 +233,17 @@ class FacebookMessengerConversation():
         emojis_p = {p: 0 for p in self.p}
         for p in emojis_p:
             emojis_p[p] = {e: 0 for e in iter(emoji.UNICODE_EMOJI.values())}
-        for message in self.data['messages']:
-            if 'content' in message and len(message) == 4:
-                msg = message['content']
-                sender = message['sender_name']
-                for c in msg:
-                    emoji_str = emoji.demojize(c)
-                    if emoji_str in emojis:
-                        emojis_p[sender][emoji_str] += 1
-                        emojis[emoji_str] += 1
+        for data in self.table:
+            for message in data['messages']:
+                if 'content' in message and len(message) == 4:
+                    msg = message['content']
+                    sender = message['sender_name']
+                    for c in msg:
+                        emoji_str = emoji.demojize(c)
+                        if emoji_str in emojis:
+                            if sender in self.p:
+                                emojis_p[sender][emoji_str] += 1
+                                emojis[emoji_str] += 1
         top_emojis = [emoji_key for emoji_key, count in sorted(emojis.items(),
                                        key=lambda kv: (-kv[1], kv[0]))[:nbr]]
         emojis_count_p = {p: {} for p in self.p}
