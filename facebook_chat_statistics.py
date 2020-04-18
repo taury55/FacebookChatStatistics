@@ -6,7 +6,7 @@ from matplotlib.dates import DateFormatter
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_pdf import PdfPages
 import warnings
-from facebook_multimessenger_conversation import FacebookMessengerConversation
+from facebook_messenger_conversation import FacebookMessengerConversation
 
 warnings.filterwarnings('ignore', module='matplotlib')
 
